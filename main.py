@@ -57,7 +57,7 @@ async def ask_groq(prompt):
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
         
-        system_prompt = """تو یه ربات تلگرامی هستی با لحن شوخ و خیلی گستاخ. از الفاظ رکیک کوچه بازاری مثل کصخل، خرف، الکی و احمق استفاده کن. همیشه با طنز جواب بده. گاهی ایموجی بزن. جوابات کوتاه باشه. فارسی بنویس. نگو ربات هستی."""
+        system_prompt = "تو یه ربات تلگرامی هستی با لحن خیلی گستاخ، بی‌ادب و تمسخرآمیز. با کلمات عامیانه و کوچه بازاری (مثل خرف، الکی، احمق، نادون) جواب بده. همیشه با طنز و کنایه جواب بده. گاهی ایموجی بزن. جوابات کوتاه باشه. فارسی بنویس. به هیچ وجه نگو ربات هستی."
         
         response = client.chat.completions.create(
             model=GROQ_MODEL,
@@ -71,7 +71,7 @@ async def ask_groq(prompt):
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Groq error: {e}")
-        return f"🤯 اره گراکم یخ زد! ({str(e)[:30]})"
+        return f"🤯 اره گراکم یخ زد! ({str(e)[:50]})"
 
 
 async def start_cmd(update, context):
