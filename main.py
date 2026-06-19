@@ -35,14 +35,26 @@ def set_status(chat_id, status):
     bot_status[chat_id] = status
 
 
+def is_replied_to_bot(update, bot_id):
+    """چک کن آیا کسی به پیام بات ریپلای زده"""
+    if update.message.reply_to_message:
+        return update.message.reply_to_message.from_user.id == bot_id
+    return False
+
+
+def has_magic_word(text):
+    """چک کن کلمه برده تو پیام هست یا نه"""
+    return "برده" in text
+
+
 async def ask_groq(prompt):
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
         
-        system_prompt = """ تو یه ربات تلگرامی هستی با لحن شوخ و کمی شیطون و بی ادب.
-- میتونی از حرفایی مثل کسخل و بیشعور و نفهم و دیوانه و کسشر و روانی و مریض و کسمغز و ... استفاده کنی وهمیشه با طنز جواب بده
-- گاهی ایموجی استفاده کن
+        system_prompt = """تو یه ربات تلگرامی هستی با لحن شوخ‌طبعانه.
+- همیشه با طنز جواب بده
+- گاهی از حرفهایی مثل کسکش و کسشر و کسمغز و کیری و ... استفاده کن اگه دیدی طرفی که باهاش حرف میزنی استفاده کرد و گاهی ایموجی استفاده کن
 - جوابات کوتاه باشه (مکس ۳ خط)
 - فارسی بنویس
 - نگو که ربات هستی"""
@@ -63,19 +75,18 @@ async def ask_groq(prompt):
 
 async def start_cmd(update, context):
     await update.message.reply_text(
-        "🤖 *سلام! من برده سایمان هستم*\n"
-        "تو گروه سوال بپرس، با اجازه سایمان جواب میدم!\n\n"
-        "سایمان با `/on` و `/off` منو کنترل می‌کنه",
+        " *سلام! من برده لرد سایمان هستم*\n\n"
+        "زنده باد سیرالئون",
         parse_mode="Markdown"
     )
 
 
 async def on_cmd(update, context):
     if not is_owner(update.effective_user.id):
-        await update.message.reply_text("🚫 تو کی هستی؟ فقط لرد سایمان دسترسی داره! 😤")
+        await update.message.reply_text("🚫 تو کی هستی؟ فقط لرد دسترسی داره! 😤")
         return
     set_status(update.effective_chat.id, True)
-    await update.message.reply_text("✅ *روشن شدم!* آماده‌ام! 😎🔥", parse_mode="Markdown")
+    await update.message.reply_text("✅ *روشن شدم!* ریپلای بزن یا بگو برده! 😎🔥", parse_mode="Markdown")
 
 
 async def off_cmd(update, context):
@@ -83,7 +94,7 @@ async def off_cmd(update, context):
         await update.message.reply_text("🚫 دسترسی نداری رفیق! 😂")
         return
     set_status(update.effective_chat.id, False)
-    await update.message.reply_text("😴 *خاموش شدم!* بیدارم کنید ناهار... 🍕", parse_mode="Markdown")
+    await update.message.reply_text("😴 *خاموش شدم!* کسمادر بدخواه سایمان... 🍕", parse_mode="Markdown")
 
 
 async def status_cmd(update, context):
@@ -94,17 +105,34 @@ async def status_cmd(update, context):
 
 
 async def handle_msg(update, context):
-    if not get_status(update.effective_chat.id):
-        return
+    chat_id = update.effective_chat.id
+    bot_id = context.bot.id
     
     text = update.message.text or ""
     if not text.strip() or text.startswith("/"):
         return
     
-    if update.message.reply_to_message:
-        if update.message.reply_to_message.from_user.id == context.bot.id:
-            return
+    # ===== پیوی: همیشه جواب بده =====
+    if update.effective_chat.type == "private":
+        await update.message.chat.send_action("typing")
+        response = await ask_groq(text)
+        await update.message.reply_text(response)
+        return
     
+    # ===== گروه =====
+    
+    # خاموشه؟ → هیچی نگو
+    if not get_status(chat_id):
+        return
+    
+    # روشنه ولی ریپلای نزده و برده هم نگفته؟ → هیچی نگو
+    replied = is_replied_to_bot(update, bot_id)
+    magic = has_magic_word(text)
+    
+    if not replied and not magic:
+        return
+    
+    # ریپلای یا برده بوده → جواب بده
     await update.message.chat.send_action("typing")
     response = await ask_groq(text)
     await update.message.reply_text(response)
