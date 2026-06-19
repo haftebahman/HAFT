@@ -1,8 +1,9 @@
 """
-ربات تلگرام با هوش مصنوعی گراک - دارای حافظه ۳۰ پیامی و فوروارد پیوی
+ربات تلگرام با هوش مصنوعی گراک - دارای حافظه ۳۰ پیامی، فوروند پیوی و ارسال ویس
 """
 
 import os
+import tempfile
 import logging
 from dotenv import load_dotenv
 from telegram import Update
@@ -29,7 +30,10 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 bot_status = {}
 chat_history = {}  
-MAX_HISTORY = 30  # افزایش حافظه به ۳۰ پیام
+MAX_HISTORY = 30 
+
+# صدای پیش‌فرض (زنانه). اگه صدای مردانه میخوای عوضش کن به: fa-IR-FaridNeural
+VOICE_NAME = "fa-IR-DilaraNeural"
 
 
 def is_owner(user_id):
@@ -51,12 +55,27 @@ def get_history(chat_id):
 def add_to_history(chat_id, role, text):
     if chat_id not in chat_history:
         chat_history[chat_id] = []
-    
     chat_history[chat_id].append({"role": role, "content": text})
-    
-    # اگه از ۳۰ تا بیشتر شد، قدیمی‌ها رو پاک کن
     if len(chat_history[chat_id]) > MAX_HISTORY:
         chat_history[chat_id] = chat_history[chat_id][-MAX_HISTORY:]
+
+
+async def text_to_voice(text):
+    """تبدیل متن به فایل صوتی و برگرداندن مسیر فایل"""
+    try:
+        import edge_tts
+        # ساخت یه فایل موقت
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ogg")
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        # ساخت ویس
+        communicate = edge_tts.Communicate(text, VOICE_NAME)
+        await communicate.save(temp_path)
+        return temp_path
+    except Exception as e:
+        logger.error(f"Voice error: {e}")
+        return None
 
 
 async def ask_groq(prompt, owner_msg=False, chat_id=0):
@@ -80,7 +99,6 @@ async def ask_groq(prompt, owner_msg=False, chat_id=0):
         )
         
         bot_reply = response.choices[0].message.content.strip()
-        
         add_to_history(chat_id, "user", prompt)
         add_to_history(chat_id, "assistant", bot_reply)
         
@@ -121,6 +139,40 @@ async def status_cmd(update, context):
     await update.message.reply_text(f"{emoji} وضعیت: *{text}*", parse_mode="Markdown")
 
 
+async def send_reply_with_voice(update, response, owner_msg, chat_id):
+    """این تابع هم متن میفرسته هم ویس"""
+    # اول متن رو بفرست
+    sent_text_msg = await update.message.reply_text(response)
+    
+    # حالا ویس رو بساز و بفرست
+    voice_path = await text_to_voice(response)
+    if voice_path:
+        try:
+            with open(voice_path, 'rb') as voice_file:
+                await update.message.reply_voice(voice_file)
+        except Exception as e:
+            logger.error(f"Sending voice failed: {e}")
+        finally:
+            # پاک کردن فایل صوتی از سرور ریلوی تا پر نشه
+            if os.path.exists(voice_path):
+                os.remove(voice_path)
+                
+    # فوروارد کردن برای صاحب (فقط پیوی و اگه صاحب نبوده)
+    if update.effective_chat.type == "private" and not owner_msg:
+        try:
+            await sent_text_msg.forward(chat_id=OWNER_ID)
+            if voice_path:
+                # چون فایل رو پاک کردیم، دوباره ویس رو میسازیم تا فوروارد بشه
+                new_voice_path = await text_to_voice(response)
+                if new_voice_path:
+                    with open(new_voice_path, 'rb') as vf:
+                        await update.message.reply_voice(vf, chat_id=OWNER_ID)
+                    if os.path.exists(new_voice_path):
+                        os.remove(new_voice_path)
+        except Exception as e:
+            logger.error(f"Forwarding error: {e}")
+
+
 async def handle_msg(update, context):
     chat_id = update.effective_chat.id
     bot_id = context.bot.id
@@ -136,26 +188,18 @@ async def handle_msg(update, context):
     if update.effective_chat.type == "private":
         await update.message.chat.send_action("typing")
         
-        # اگه پیام از صاحب بات نبود، پیام کاربر رو برای صاحب فوروارد کن
+        # فوروارد پیام کاربر برای صاحب
         if not owner_msg:
             try:
                 await update.message.forward(chat_id=OWNER_ID)
             except Exception as e:
                 logger.error(f"Forward user msg error: {e}")
         
-        # جواب بات رو بگیر
+        # گرفتن جواب
         response = await ask_groq(text, owner_msg, chat_id)
         
-        # جواب رو برای کاربر بفرست
-        bot_message = await update.message.reply_text(response)
-        
-        # جواب بات رو هم برای صاحب فوروارد کن
-        if not owner_msg:
-            try:
-                await bot_message.forward(chat_id=OWNER_ID)
-            except Exception as e:
-                logger.error(f"Forward bot msg error: {e}")
-                
+        # فرستادن جواب (متن + ویس + فوروارد برای صاحب)
+        await send_reply_with_voice(update, response, owner_msg, chat_id)
         return
     
     # ===== گروه =====
@@ -165,7 +209,9 @@ async def handle_msg(update, context):
     # گروه روشن: به همه جواب بده
     await update.message.chat.send_action("typing")
     response = await ask_groq(text, owner_msg, chat_id)
-    await update.message.reply_text(response)
+    
+    # فرستادن جواب (متن + ویس)
+    await send_reply_with_voice(update, response, owner_msg, chat_id)
 
 
 async def error_handler(update, context):
