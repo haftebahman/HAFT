@@ -16,7 +16,6 @@ from telegram.ext import (
 
 load_dotenv()
 
-# تنظیم لاگ
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -58,13 +57,7 @@ async def ask_groq(prompt):
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
         
-                system_prompt = """تو یه ربات تلگرامی هستی با لحن شوخ، گستاخ و کمی بی‌ادب.
-- از الفاظ رکیک کوچه بازاری و تمسخرآمیز استفاده کن (مثل کصخل، خرف، الکی، احمق و...) ولی به هیچ وجه از کلمات کاملاً مستهجن و حرام استفاده نکن چون فیلترم میکنن!
-- همیشه با طنز و کنایه جواب بده
-- گاهی ایموجی استفاده کن
-- جوابات کوتاه و کوبنده باشه (مکس ۳ خط)
-- فارسی بنویس
-- به هیچ وجه نگو که ربات هستی یا هوش مصنوعی"""
+        system_prompt = """تو یه ربات تلگرامی هستی با لحن شوخ و خیلی گستاخ. از الفاظ رکیک کوچه بازاری مثل کصخل، خرف، الکی و احمق استفاده کن. همیشه با طنز جواب بده. گاهی ایموجی بزن. جوابات کوتاه باشه. فارسی بنویس. نگو ربات هستی."""
         
         response = client.chat.completions.create(
             model=GROQ_MODEL,
@@ -120,18 +113,15 @@ async def handle_msg(update, context):
     if not text.strip() or text.startswith("/"):
         return
     
-    # پیوی: همیشه جواب بده
     if update.effective_chat.type == "private":
         await update.message.chat.send_action("typing")
         response = await ask_groq(text)
         await update.message.reply_text(response)
         return
     
-    # گروه خاموش → هیچی
     if not get_status(chat_id):
         return
     
-    # گروه روشن: فقط ریپلای یا برده
     replied = is_replied_to_bot(update, bot_id)
     magic = has_magic_word(text)
     
@@ -159,7 +149,6 @@ def main():
     
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # ثبت هندلرها
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("on", on_cmd))
     app.add_handler(CommandHandler("off", off_cmd))
@@ -168,8 +157,6 @@ def main():
     app.add_error_handler(error_handler)
     
     logger.info("✅ بات روشن شد!")
-    
-    # ران با پولینگ (بدون نیاز به آدرس وب و پکیج اضافه)
     app.run_polling(drop_pending_updates=True)
 
 
