@@ -202,11 +202,17 @@ async def handle_msg(update, context):
         await send_reply_with_voice(update, response, owner_msg, chat_id)
         return
     
-    # ===== گروه =====
+        # ===== گروه =====
     if not get_status(chat_id):
         return
     
-    # گروه روشن: به همه جواب بده
+    # گروه روشن: فقط ریپلای یا برده
+    replied = is_replied_to_bot(update, bot_id)
+    magic = has_magic_word(text)
+    
+    if not replied and not magic:
+        return
+    
     await update.message.chat.send_action("typing")
     response = await ask_groq(text, owner_msg, chat_id)
     
