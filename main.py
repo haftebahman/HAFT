@@ -1,5 +1,5 @@
 """
-ربات تلگرام با هوش مصنوعی گراک - نسخه وب‌هوک
+ربات تلگرام با هوش مصنوعی گراک
 """
 
 import os
@@ -27,8 +27,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-PORT = int(os.getenv("PORT", "8080"))
-RAILWAY_STATIC_URL = os.getenv("RAILWAY_STATIC_URL", "")
 
 bot_status = {}
 
@@ -148,12 +146,6 @@ async def error_handler(update, context):
     logger.error(f"Error: {context.error}")
 
 
-async def webhook_health(request):
-    """سلامت وب‌هوک - Railway اینو چک میکنه"""
-    from aiohttp.web import Response
-    return Response(text="OK")
-
-
 def main():
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN تنظیم نشده!")
@@ -174,17 +166,10 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     app.add_error_handler(error_handler)
     
-    # ساخت آدرس وب‌هوک
-    webhook_url = f"https://{RAILWAY_STATIC_URL}/webhook"
-    logger.info(f"Webhook URL: {webhook_url}")
+    logger.info("✅ بات روشن شد!")
     
-    # ران با وب‌هوک
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path="webhook",
-        webhook_url=webhook_url,
-    )
+    # ران با پولینگ (بدون نیاز به آدرس وب و پکیج اضافه)
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
